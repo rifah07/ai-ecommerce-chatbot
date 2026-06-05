@@ -1,3 +1,5 @@
+import Navbar from "@/components/layout/Navbar";
+
 export default function ShopLayout({
   children,
 }: {
@@ -5,13 +7,10 @@ export default function ShopLayout({
 }) {
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navbar — added Day 4 */}
-      <nav className="bg-white border-b px-6 py-4">
-        <p className="font-semibold text-gray-900">
-          ShopBot - Navbar
-        </p>
-      </nav>
-      <main>{children}</main>
+      <Navbar />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {children}
+      </main>
     </div>
   );
 }
