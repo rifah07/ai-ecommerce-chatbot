@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ZodError } from "zod";
+import { ZodError, ZodIssue } from "zod";
 
 export type ErrorCode =
   | "UNAUTHORIZED"
@@ -22,19 +22,16 @@ export class AppError extends Error {
 
   constructor(code: ErrorCode, message: string) {
     super(message);
-
-    Object.setPrototypeOf(this, AppError.prototype);
-
     this.code = code;
     this.statusCode = HTTP_STATUS[code];
     this.name = "AppError";
   }
 }
 
-type RouteHandler<TContext = unknown> = (
+type RouteHandler = (
   req: NextRequest,
-  context?: TContext,
-) => Promise<Response>;
+  context?: unknown,
+) => Promise<NextResponse>;
 
 export function withErrorHandler(handler: RouteHandler): RouteHandler {
   return async (req, context) => {
@@ -45,22 +42,16 @@ export function withErrorHandler(handler: RouteHandler): RouteHandler {
         return NextResponse.json(
           {
             success: false,
-            error: {
-              code: error.code,
-              message: error.message,
-            },
+            error: { code: error.code, message: error.message },
           },
-          {
-            status: error.statusCode,
-          },
+          { status: error.statusCode },
         );
       }
 
       if (error instanceof ZodError) {
-        const details = error.issues.map(
-          (issue) => `${issue.path.join(".")}: ${issue.message}`,
+        const details = (error as ZodError).issues.map(
+          (issue: ZodIssue) => `${issue.path.join(".")}: ${issue.message}`,
         );
-
         return NextResponse.json(
           {
             success: false,
@@ -70,14 +61,11 @@ export function withErrorHandler(handler: RouteHandler): RouteHandler {
               details,
             },
           },
-          {
-            status: 422,
-          },
+          { status: 422 },
         );
       }
 
       console.error("[API Error]", error);
-
       return NextResponse.json(
         {
           success: false,
@@ -86,9 +74,7 @@ export function withErrorHandler(handler: RouteHandler): RouteHandler {
             message: "An unexpected error occurred",
           },
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       );
     }
   };

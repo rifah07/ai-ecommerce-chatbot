@@ -1,7 +1,7 @@
+import CartView from "@/components/cart/CartView";
+
+export const metadata = { title: "Cart — ShopBot" };
+
 export default function CartPage() {
-  return (
-    <main className="p-8">
-      <h1 className="text-2xl font-bold">Cart</h1>
-    </main>
-  );
+  return <CartView />;
 }
