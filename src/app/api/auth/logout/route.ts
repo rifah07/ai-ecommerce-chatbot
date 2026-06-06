@@ -1,9 +1,23 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { withErrorHandler } from "@/lib/utils/AppError";
-import { successResponse } from "@/lib/utils/response";
-import { clearAuthCookies } from "@/lib/auth/cookies";
 
 export const POST = withErrorHandler(async (_request: NextRequest) => {
-    clearAuthCookies();
-    return successResponse(null, "Logged out successfully");
+  const response = NextResponse.json(
+    { success: true, data: null, message: "Logged out successfully" },
+    { status: 200 },
+  );
+
+  // Clear both cookies by setting maxAge to 0
+  response.cookies.set("accessToken", "", {
+    httpOnly: true,
+    path: "/",
+    maxAge: 0,
+  });
+  response.cookies.set("refreshToken", "", {
+    httpOnly: true,
+    path: "/",
+    maxAge: 0,
+  });
+
+  return response;
 });
