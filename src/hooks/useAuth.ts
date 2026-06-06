@@ -1,132 +1,57 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import type { IUser, ApiResponse } from "@/types";
 
-interface AuthState {
+interface UseAuthReturn {
   user: IUser | null;
   loading: boolean;
-  error: string | null;
-}
-
-interface UseAuthReturn extends AuthState {
   logout: () => Promise<void>;
-  refetch: () => Promise<void>;
 }
 
 export function useAuth(): UseAuthReturn {
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    loading: true,
-    error: null,
-  });
-
-  const fetchUser = useCallback(async () => {
-    setState((prev) => ({ ...prev, loading: true, error: null }));
-
-    try {
-      const res = await fetch("/api/auth/me");
-
-      // access token expired → try refresh
-      if (res.status === 401) {
-        const refreshRes = await fetch("/api/auth/refresh", {
-          method: "POST",
-        });
-
-        if (refreshRes.ok) {
-          const retryRes = await fetch("/api/auth/me");
-          const retryData: ApiResponse<{ user: IUser }> = await retryRes.json();
-
-          if (retryData.success) {
-            setState({
-              user: retryData.data.user,
-              loading: false,
-              error: null,
-            });
-            return;
-          }
-        }
-
-        setState({ user: null, loading: false, error: null });
-        return;
-      }
-
-      const data: ApiResponse<{ user: IUser }> = await res.json();
-
-      if (data.success) {
-        setState({
-          user: data.data.user,
-          loading: false,
-          error: null,
-        });
-      } else {
-        setState({ user: null, loading: false, error: null });
-      }
-    } catch {
-      setState({
-        user: null,
-        loading: false,
-        error: "Failed to fetch user",
-      });
-    }
-  }, []);
+  const [user, setUser] = useState<IUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch("/api/auth/me");
+    let cancelled = false;
 
+    async function load() {
+      try {
+        let res = await fetch("/api/auth/me");
+
+        // Access token expired — try refresh once
         if (res.status === 401) {
           const refreshRes = await fetch("/api/auth/refresh", {
             method: "POST",
           });
-
           if (refreshRes.ok) {
-            const retryRes = await fetch("/api/auth/me");
-            const retryData = await retryRes.json();
-
-            if (retryData.success) {
-              setState({
-                user: retryData.data.user,
-                loading: false,
-                error: null,
-              });
-              return;
-            }
+            res = await fetch("/api/auth/me");
           }
-
-          setState({ user: null, loading: false, error: null });
-          return;
         }
 
-        const data = await res.json();
+        if (cancelled) return;
 
-        if (data.success) {
-          setState({
-            user: data.data.user,
-            loading: false,
-            error: null,
-          });
-        } else {
-          setState({ user: null, loading: false, error: null });
-        }
+        const data: ApiResponse<{ user: IUser }> = await res.json();
+        setUser(data.success ? data.data.user : null);
       } catch {
-        setState({
-          user: null,
-          loading: false,
-          error: "Failed to fetch user",
-        });
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    };
+    }
 
-    fetchUser();
-  }, []);
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []); // runs once on mount
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    setState({ user: null, loading: false, error: null });
+    setUser(null);
     window.location.href = "/login";
   };
 
-  return { ...state, logout, refetch: fetchUser };
+  return { user, loading, logout };
 }
