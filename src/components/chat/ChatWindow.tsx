@@ -11,7 +11,6 @@ export default function ChatWindow() {
     const { messages, loading, sending, sendMessage } = useChat();
     const bottomRef = useRef<HTMLDivElement>(null);
 
-    // Auto-scroll to latest message
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
@@ -19,7 +18,7 @@ export default function ChatWindow() {
     return (
         <div className="flex flex-col h-[calc(100vh-8rem)] max-w-2xl mx-auto bg-white rounded-xl border shadow-sm overflow-hidden">
             {/* Header */}
-            <div className="flex items-center gap-3 px-5 py-4 border-b bg-gray-50">
+            <div className="flex items-center gap-3 px-5 py-4 border-b bg-gray-50 shrink-0">
                 <div className="w-9 h-9 rounded-full bg-gray-900 flex items-center justify-center">
                     <MessageCircle className="w-4 h-4 text-white" />
                 </div>
@@ -49,8 +48,7 @@ export default function ChatWindow() {
                                 Start a conversation
                             </p>
                             <p className="text-gray-400 text-xs mt-1 max-w-xs">
-                                Try: &quot;Show me running t-shirts&quot; or &quot;Add a slim
-                                chino in size M to my cart&quot;
+                                Try asking me to show products or add something to your cart.
                             </p>
                         </div>
                         <div className="flex flex-wrap justify-center gap-2 pt-2">
@@ -58,14 +56,14 @@ export default function ChatWindow() {
                                 "Show me all t-shirts",
                                 "Show running products",
                                 "View my cart",
-                                "Show gym pants",
-                            ].map((suggestion) => (
+                                "Show gym pants in size L",
+                            ].map((s) => (
                                 <button
-                                    key={suggestion}
-                                    onClick={() => sendMessage(suggestion)}
+                                    key={s}
+                                    onClick={() => sendMessage(s)}
                                     className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-full transition-colors"
                                 >
-                                    {suggestion}
+                                    {s}
                                 </button>
                             ))}
                         </div>
@@ -74,7 +72,7 @@ export default function ChatWindow() {
                     messages.map((msg) => <ChatMessage key={msg._id} message={msg} />)
                 )}
 
-                {/* Typing indicator while sending */}
+                {/* Typing indicator */}
                 {sending && (
                     <div className="flex justify-start">
                         <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">

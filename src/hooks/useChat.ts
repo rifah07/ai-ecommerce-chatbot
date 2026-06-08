@@ -1,24 +1,37 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { IChatMessage, ApiResponse, IChatHistory } from "@/types";
+import type {
+  IChatMessage,
+  ApiResponse,
+  IChatHistory,
+  IProduct,
+  ICart,
+  IOrder,
+} from "@/types";
+
+// Extended message type that can carry structured data
+export interface ChatMessageWithData extends IChatMessage {
+  data?: {
+    type: "products" | "cart" | "order";
+    payload: IProduct[] | ICart | IOrder;
+  };
+}
 
 interface UseChatReturn {
-  messages: IChatMessage[];
+  messages: ChatMessageWithData[];
   loading: boolean;
   sending: boolean;
   sendMessage: (text: string) => Promise<void>;
 }
 
 export function useChat(): UseChatReturn {
-  const [messages, setMessages] = useState<IChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessageWithData[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
 
-  // Load history on mount
   useEffect(() => {
     let cancelled = false;
-
     async function load() {
       setLoading(true);
       try {
@@ -31,7 +44,6 @@ export function useChat(): UseChatReturn {
         if (!cancelled) setLoading(false);
       }
     }
-
     load();
     return () => {
       cancelled = true;
@@ -39,8 +51,7 @@ export function useChat(): UseChatReturn {
   }, []);
 
   const sendMessage = async (text: string) => {
-    // Optimistic: add user message immediately
-    const optimistic: IChatMessage = {
+    const optimistic: ChatMessageWithData = {
       _id: `temp-${Date.now()}`,
       userId: "",
       role: "user",
@@ -56,25 +67,54 @@ export function useChat(): UseChatReturn {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
       });
-      const data: ApiResponse<{ message: string; messageId: string }> =
-        await res.json();
+      const result: ApiResponse<{
+        message: string;
+        messageId: string;
+        data?: unknown;
+      }> = await res.json();
 
-      if (data.success) {
-        // Replace optimistic message with confirmed one + add assistant reply
+      if (result.success) {
+        // Detect what kind of data came back
+        const raw = result.data.data;
+        let attachedData: ChatMessageWithData["data"] = undefined;
+
+        if (
+          Array.isArray(raw) &&
+          raw.length > 0 &&
+          "availableSizes" in (raw[0] as object)
+        ) {
+          attachedData = { type: "products", payload: raw as IProduct[] };
+        } else if (
+          raw &&
+          typeof raw === "object" &&
+          "items" in (raw as object) &&
+          "total" in (raw as object)
+        ) {
+          attachedData = { type: "cart", payload: raw as ICart };
+        } else if (
+          raw &&
+          typeof raw === "object" &&
+          "totalAmount" in (raw as object)
+        ) {
+          attachedData = { type: "order", payload: raw as IOrder };
+        }
+
+        const assistantMsg: ChatMessageWithData = {
+          _id: result.data.messageId,
+          userId: "",
+          role: "assistant",
+          content: result.data.message,
+          timestamp: new Date(),
+          data: attachedData,
+        };
+
         setMessages((prev) => [
           ...prev.filter((m) => m._id !== optimistic._id),
           { ...optimistic, _id: `user-${Date.now()}` },
-          {
-            _id: data.data.messageId,
-            userId: "",
-            role: "assistant",
-            content: data.data.message,
-            timestamp: new Date(),
-          },
+          assistantMsg,
         ]);
       }
     } catch {
-      // Remove optimistic message on failure
       setMessages((prev) => prev.filter((m) => m._id !== optimistic._id));
     } finally {
       setSending(false);
