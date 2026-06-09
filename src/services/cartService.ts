@@ -67,7 +67,7 @@ export const cartService = {
     await CartItem.findOneAndUpdate(
       { userId, productId: input.productId, size: input.size },
       { $inc: { quantity: input.quantity } },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
     );
 
     return {
