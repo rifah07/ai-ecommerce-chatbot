@@ -10,7 +10,9 @@ import { cartService } from "@/services/cartService";
 export const DELETE = withErrorHandler(
   async (request: NextRequest, context?: unknown) => {
     const user = await requireRole(request, "CUSTOMER");
-    const itemId = (context as { params: { itemId: string } })?.params?.itemId;
+    const { itemId } = await (
+      context as { params: Promise<{ itemId: string }> }
+    ).params;
 
     if (!itemId) {
       throw new Error("Item ID is required");
