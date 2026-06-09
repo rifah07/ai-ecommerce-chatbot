@@ -1,14 +1,15 @@
 import Order from "@/models/Order";
 import CartItem from "@/models/CartItem";
-import { cartService } from "@/services/cartService";
 import { connectDB } from "@/lib/db/connect";
 import { AppError } from "@/lib/utils/AppError";
 
 export const orderService = {
+  /**
+   * Checkout entire cart.
+   */
   async checkout(userId: string) {
     await connectDB();
 
-    // Fetch cart items with product populated directly from DB for accuracy at checkout time
     const cartItems = await CartItem.find({ userId })
       .populate("productId", "name price")
       .lean();
@@ -16,6 +17,7 @@ export const orderService = {
     if (cartItems.length === 0) {
       throw new AppError("BUSINESS_RULE_ERROR", "Your cart is empty");
     }
+
     const items = cartItems.map((item) => {
       const product = item.productId as unknown as {
         _id: string;
@@ -43,8 +45,54 @@ export const orderService = {
       status: "PENDING",
     });
 
-    // Clear cart after order created
-    await cartService.clearCart(userId);
+    await CartItem.deleteMany({ userId });
+
+    return order;
+  },
+
+  /**
+   * Checkout a single cart item by its _id.
+   * Removes only that item from cart, rest remains.
+   */
+  async checkoutItem(userId: string, itemId: string) {
+    await connectDB();
+
+    const cartItem = await CartItem.findOne({ _id: itemId, userId })
+      .populate("productId", "name price")
+      .lean();
+
+    if (!cartItem) {
+      throw new AppError("NOT_FOUND", "Cart item not found");
+    }
+
+    const product = cartItem.productId as unknown as {
+      _id: string;
+      name: string;
+      price: number;
+    };
+
+    const items = [
+      {
+        productId: product._id,
+        name: product.name,
+        price: product.price,
+        size: cartItem.size,
+        quantity: cartItem.quantity,
+      },
+    ];
+
+    const totalAmount =
+      Math.round(product.price * cartItem.quantity * 100) / 100;
+
+    const order = await Order.create({
+      userId,
+      items,
+      totalAmount,
+      status: "PENDING",
+    });
+
+    // Remove only this item from cart
+    await CartItem.deleteOne({ _id: itemId });
 
     return order;
   },
