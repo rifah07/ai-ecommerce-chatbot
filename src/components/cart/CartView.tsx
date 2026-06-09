@@ -1,16 +1,41 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ShoppingBag, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import CartItemCard from "@/components/cart/CartItem";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { useCart } from "@/hooks/useCart";
+import type { ApiResponse, IOrder } from "@/types";
 
 export default function CartView() {
+  const router = useRouter();
   const { cart, loading, error, removeItem, removing, checkout, checkingOut } =
     useCart();
+  const [orderingItem, setOrderingItem] = useState<string | null>(null);
+
+  const orderSingleItem = useCallback(
+    async (itemId: string) => {
+      setOrderingItem(itemId);
+      try {
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemId }),
+        });
+        const data: ApiResponse<IOrder> = await res.json();
+        if (data.success) {
+          router.push("/orders");
+        }
+      } finally {
+        setOrderingItem(null);
+      }
+    },
+    [router],
+  );
 
   if (loading) return <LoadingSpinner size="lg" className="py-20" />;
 
@@ -61,12 +86,27 @@ export default function CartView() {
       {/* Cart items */}
       <div className="space-y-3">
         {cart.items.map((item) => (
-          <CartItemCard
-            key={item._id}
-            item={item as Parameters<typeof CartItemCard>[0]["item"]}
-            onRemove={removeItem}
-            removing={removing === item._id}
-          />
+          <div key={item._id} className="space-y-2">
+            <CartItemCard
+              item={item as Parameters<typeof CartItemCard>[0]["item"]}
+              onRemove={removeItem}
+              removing={removing === item._id}
+            />
+            {/* Order single item button */}
+            <div className="flex justify-end pr-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-7"
+                disabled={orderingItem === item._id || checkingOut}
+                onClick={() => orderSingleItem(item._id)}
+              >
+                {orderingItem === item._id
+                  ? "Placing…"
+                  : "Order this item only"}
+              </Button>
+            </div>
+          </div>
         ))}
       </div>
 
@@ -92,18 +132,18 @@ export default function CartView() {
           className="w-full mt-2"
           size="lg"
           onClick={checkout}
-          disabled={checkingOut}
+          disabled={checkingOut || !!orderingItem}
         >
           {checkingOut
             ? "Placing order…"
-            : `Place Order — $${cart.total.toFixed(2)}`}
+            : `Checkout All - $${cart.total.toFixed(2)}`}
         </Button>
 
         <p className="text-center text-xs text-gray-400">
           Or tell the chatbot{" "}
           <Link href="/chat" className="underline hover:text-gray-600">
             &quot;checkout&quot;
-          </Link>
+          </Link>{" "}
           to order from there.
         </p>
       </div>
