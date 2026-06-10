@@ -4,7 +4,7 @@ A full-stack e-commerce application where users interact with an AI chatbot to b
 
 ## Live Demo
 
-> [Vercel URL]
+> https://ai-ecommerce-chatbot-six.vercel.app/shop
 
 **Test Accounts**
 | Role | Email | Password |
@@ -104,7 +104,7 @@ src/
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ai-ecommerce-chatbot.git
+git clone https://github.com/rifah07/ai-ecommerce-chatbot.git
 cd ai-ecommerce-chatbot
 npm install
 ```
