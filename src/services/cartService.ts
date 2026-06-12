@@ -7,24 +7,18 @@ import type { AddToCartInput } from "@/validators/cartValidators";
 import type { CartTarget } from "@/types";
 
 export const cartService = {
-  /**
-   * Return all cart items for a user with product data populated.
-   * Also computes total price and item count.
-   */
   async getCart(userId: string) {
     await connectDB();
-
     const items = await CartItem.find({ userId })
       .populate("productId")
       .sort({ createdAt: -1 });
 
-    // Rename productId → product for cleaner frontend consumption
     const mapped = items.map((item) => ({
-      _id: item._id,
+      _id: item._id.toString(),
       size: item.size,
       quantity: item.quantity,
       createdAt: item.createdAt,
-      product: item.productId, // populated
+      product: item.productId,
     }));
 
     const total = mapped.reduce((sum, item) => {
@@ -39,17 +33,10 @@ export const cartService = {
     };
   },
 
-  /**
-   * Add an item to the cart (called from the direct cart API).
-   * Checks size availability first.
-   * If size is unavailable → creates a SizeRequest instead.
-   */
   async addItem(userId: string, input: AddToCartInput) {
     await connectDB();
-
     const product = await productService.findById(input.productId);
 
-    // Size availability check
     if (!product.availableSizes.includes(input.size)) {
       await sizeRequestService.create(
         userId,
@@ -59,11 +46,10 @@ export const cartService = {
       return {
         added: false,
         sizeRequested: true,
-        message: `${input.size} is currently unavailable for "${product.name}". We've saved your request and will notify you when it's back in stock.`,
+        message: `${input.size} is currently unavailable for "${product.name}". We've saved your request!`,
       };
     }
 
-    // Upsert: if the user already has this product+size in cart, increment quantity
     await CartItem.findOneAndUpdate(
       { userId, productId: input.productId, size: input.size },
       { $inc: { quantity: input.quantity } },
@@ -77,10 +63,6 @@ export const cartService = {
     };
   },
 
-  /**
-   * Add item from chat intent (uses productName string instead of productId).
-   * Resolves the product by name first, then delegates to addItem.
-   */
   async addItemFromChat(userId: string, target: CartTarget) {
     await connectDB();
 
@@ -101,7 +83,7 @@ export const cartService = {
     if (!product) {
       return {
         added: false,
-        message: `I couldn't find a product matching "${target.productName}". Try browsing the shop or use a different name.`,
+        message: `I couldn't find a product matching "${target.productName}". Try browsing the shop.`,
       };
     }
 
@@ -113,24 +95,35 @@ export const cartService = {
   },
 
   /**
-   * Remove a specific cart item by its _id.
-   * Verifies the item belongs to the requesting user.
+   * Update quantity of a specific cart item.
+   * If quantity <= 0, removes the item entirely.
    */
-  async removeItem(userId: string, itemId: string) {
+  async updateQuantity(userId: string, itemId: string, quantity: number) {
     await connectDB();
 
-    const item = await CartItem.findOne({ _id: itemId, userId });
-    if (!item) {
-      throw new AppError("NOT_FOUND", "Cart item not found");
+    if (quantity <= 0) {
+      return this.removeItem(userId, itemId);
     }
 
+    const item = await CartItem.findOneAndUpdate(
+      { _id: itemId, userId },
+      { quantity },
+      { returnDocument: "after" },
+    );
+
+    if (!item) throw new AppError("NOT_FOUND", "Cart item not found");
+
+    return { message: `Quantity updated to ${quantity}.` };
+  },
+
+  async removeItem(userId: string, itemId: string) {
+    await connectDB();
+    const item = await CartItem.findOne({ _id: itemId, userId });
+    if (!item) throw new AppError("NOT_FOUND", "Cart item not found");
     await item.deleteOne();
     return { message: "Item removed from cart." };
   },
 
-  /**
-   * Remove an item from chat intent (uses productName + size).
-   */
   async removeItemFromChat(userId: string, target: CartTarget) {
     await connectDB();
 
@@ -148,10 +141,7 @@ export const cartService = {
       };
     }
 
-    const query: Record<string, unknown> = {
-      userId,
-      productId: product._id,
-    };
+    const query: Record<string, unknown> = { userId, productId: product._id };
     if (target.size) query.size = target.size;
 
     const item = await CartItem.findOne(query);
@@ -168,9 +158,44 @@ export const cartService = {
   },
 
   /**
-   * Delete all cart items for a user.
-   * Called internally by orderService after checkout.
+   * Update quantity from chat intent.
+   * "change shirt quantity to 2" → sets quantity to 2, does not remove
    */
+  async updateQuantityFromChat(userId: string, target: CartTarget) {
+    await connectDB();
+
+    if (!target.productName) {
+      return { message: "Which product quantity would you like to change?" };
+    }
+
+    const product = await productService.findByName(target.productName);
+    if (!product) {
+      return {
+        message: `I couldn't find "${target.productName}" in your cart.`,
+      };
+    }
+
+    const query: Record<string, unknown> = { userId, productId: product._id };
+    if (target.size) query.size = target.size;
+
+    const item = await CartItem.findOne(query);
+    if (!item) {
+      return { message: `"${product.name}" is not in your cart.` };
+    }
+
+    const newQty = target.quantity ?? 1;
+
+    if (newQty <= 0) {
+      await item.deleteOne();
+      return { message: `"${product.name}" removed from your cart.` };
+    }
+
+    await CartItem.findByIdAndUpdate(item._id, { quantity: newQty });
+    return {
+      message: `"${product.name}" (${item.size}) quantity updated to ${newQty}.`,
+    };
+  },
+
   async clearCart(userId: string) {
     await connectDB();
     await CartItem.deleteMany({ userId });
