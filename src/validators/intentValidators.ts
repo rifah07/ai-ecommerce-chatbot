@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { PRODUCT_SIZES, PRODUCT_CATEGORIES } from "@/constants";
 
-// Sub-schemas
 const BrowseFiltersSchema = z.object({
   category: z.enum(PRODUCT_CATEGORIES).optional(),
   size: z.enum(PRODUCT_SIZES).optional(),
@@ -20,8 +19,6 @@ const SizeRequestTargetSchema = z.object({
   size: z.enum(PRODUCT_SIZES).optional(),
 });
 
-// Master schema (discriminated union)
-
 export const IntentSchema = z.discriminatedUnion("intent", [
   z.object({
     intent: z.literal("BROWSE_PRODUCTS"),
@@ -39,11 +36,26 @@ export const IntentSchema = z.discriminatedUnion("intent", [
     confidence: z.enum(["high", "medium", "low"]),
   }),
   z.object({
+    intent: z.literal("UPDATE_QUANTITY"),
+    target: CartTargetSchema,
+    confidence: z.enum(["high", "medium", "low"]),
+  }),
+  z.object({
     intent: z.literal("VIEW_CART"),
     confidence: z.enum(["high", "medium", "low"]),
   }),
   z.object({
     intent: z.literal("CHECKOUT"),
+    confidence: z.enum(["high", "medium", "low"]),
+  }),
+  z.object({
+    intent: z.literal("CHECKOUT_ITEM"),
+    target: CartTargetSchema,
+    confidence: z.enum(["high", "medium", "low"]),
+  }),
+  z.object({
+    intent: z.literal("CANCEL_ORDER"),
+    orderId: z.string().optional(),
     confidence: z.enum(["high", "medium", "low"]),
   }),
   z.object({
