@@ -4,9 +4,6 @@ import { connectDB } from "@/lib/db/connect";
 import { AppError } from "@/lib/utils/AppError";
 
 export const orderService = {
-  /**
-   * Checkout entire cart.
-   */
   async checkout(userId: string) {
     await connectDB();
 
@@ -44,16 +41,10 @@ export const orderService = {
       totalAmount,
       status: "PENDING",
     });
-
     await CartItem.deleteMany({ userId });
-
     return order;
   },
 
-  /**
-   * Checkout a single cart item by its _id.
-   * Removes only that item from cart, rest remains.
-   */
   async checkoutItem(userId: string, itemId: string) {
     await connectDB();
 
@@ -61,9 +52,7 @@ export const orderService = {
       .populate("productId", "name price")
       .lean();
 
-    if (!cartItem) {
-      throw new AppError("NOT_FOUND", "Cart item not found");
-    }
+    if (!cartItem) throw new AppError("NOT_FOUND", "Cart item not found");
 
     const product = cartItem.productId as unknown as {
       _id: string;
@@ -71,28 +60,81 @@ export const orderService = {
       price: number;
     };
 
-    const items = [
-      {
-        productId: product._id,
-        name: product.name,
-        price: product.price,
-        size: cartItem.size,
-        quantity: cartItem.quantity,
-      },
-    ];
-
     const totalAmount =
       Math.round(product.price * cartItem.quantity * 100) / 100;
 
     const order = await Order.create({
       userId,
-      items,
+      items: [
+        {
+          productId: product._id,
+          name: product.name,
+          price: product.price,
+          size: cartItem.size,
+          quantity: cartItem.quantity,
+        },
+      ],
       totalAmount,
       status: "PENDING",
     });
 
-    // Remove only this item from cart
     await CartItem.deleteOne({ _id: itemId });
+    return order;
+  },
+
+  async checkoutItemByName(userId: string, productName: string, size?: string) {
+    await connectDB();
+
+    const { productService } = await import("@/services/productService");
+    const product = await productService.findByName(productName);
+    if (!product) {
+      throw new AppError(
+        "NOT_FOUND",
+        `Product "${productName}" not found in your cart`,
+      );
+    }
+
+    const query: Record<string, unknown> = { userId, productId: product._id };
+    if (size) query.size = size;
+
+    const cartItem = await CartItem.findOne(query)
+      .populate("productId", "name price")
+      .lean();
+    if (!cartItem) {
+      throw new AppError("NOT_FOUND", `"${product.name}" is not in your cart`);
+    }
+
+    return this.checkoutItem(userId, cartItem._id.toString());
+  },
+
+  /**
+   * Cancel an order.
+   * Only PENDING or CONFIRMED orders can be cancelled.
+   * Returns the cancelled order with the amount for revenue deduction.
+   */
+  async cancelOrder(userId: string, orderId?: string) {
+    await connectDB();
+
+    // If no orderId, cancel the most recent cancellable order
+    const query: Record<string, unknown> = {
+      userId,
+      status: { $in: ["PENDING", "CONFIRMED"] },
+    };
+    if (orderId) query._id = orderId;
+
+    const order = await Order.findOne(query).sort({ createdAt: -1 });
+
+    if (!order) {
+      throw new AppError(
+        "NOT_FOUND",
+        orderId
+          ? "Order not found or cannot be cancelled"
+          : "No cancellable orders found. Only PENDING or CONFIRMED orders can be cancelled.",
+      );
+    }
+
+    order.status = "CANCELLED";
+    await order.save();
 
     return order;
   },
