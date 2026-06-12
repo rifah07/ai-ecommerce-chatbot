@@ -6,15 +6,9 @@ import { seedProducts } from "@/data/products";
 import { hashPassword } from "@/lib/utils/hash";
 
 /**
- * POST /api/seed
- *
- * One-time dev endpoint to populate the database.
- * Protected by a SEED_SECRET env variable so it cannot be
- * accidentally called in production.
- *
- * Usage:
- *   curl -X POST http://localhost:3000/api/seed \
- *        -H "x-seed-secret: your_seed_secret"
+ * POST /api/seed  - seeds products and admin user only.
+ * Does NOT touch ChatMessage, Orders, CartItems, or SizeRequests.
+ * Safe to run multiple times.
  */
 export async function POST(request: NextRequest) {
   const secret = request.headers.get("x-seed-secret");
@@ -29,12 +23,11 @@ export async function POST(request: NextRequest) {
 
   await connectDB();
 
-  //Seed products
+  // Only reseed products. Never touch user data or chat history
   await Product.deleteMany({});
-  const insertedProducts = await Product.insertMany(seedProducts);
+  const inserted = await Product.insertMany(seedProducts);
 
-  // Seed admin user
-  // Credentials: admin@shopbot.com / Admin1234!
+  // Create admin only if not exists
   const existingAdmin = await User.findOne({ email: "admin@shopbot.com" });
   if (!existingAdmin) {
     await User.create({
@@ -48,13 +41,14 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     data: {
-      products: insertedProducts.length,
+      products: inserted.length,
       adminCreated: !existingAdmin,
-      adminCredentials: {
-        email: "admin@shopbot.com",
-        password: "Admin1234!",
-      },
     },
-    message: `Seeded ${insertedProducts.length} products and admin user`,
+    message: `Seeded ${inserted.length} products`,
   });
+}
+
+// GET for easy browser testing
+export async function GET(request: NextRequest) {
+  return POST(request);
 }
