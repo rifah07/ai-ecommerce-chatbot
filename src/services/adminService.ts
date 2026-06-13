@@ -21,22 +21,30 @@ export const adminService = {
 
   async getDashboardStats() {
     await connectDB();
-    const [totalOrders, totalUsers, pendingSizeRequests, revenueResult] =
-      await Promise.all([
-        Order.countDocuments(),
-        User.countDocuments({ role: "CUSTOMER" }),
-        SizeRequest.countDocuments({ status: "PENDING" }),
-        Order.aggregate([
-          { $match: { status: { $ne: "CANCELLED" } } },
-          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-        ]),
-      ]);
+    const [
+      totalOrders,
+      totalUsers,
+      pendingSizeRequests,
+      revenueResult,
+      cancelledCount,
+    ] = await Promise.all([
+      Order.countDocuments({ status: { $ne: "CANCELLED" } }),
+      User.countDocuments({ role: "CUSTOMER" }),
+      SizeRequest.countDocuments({ status: "PENDING" }),
+      // Revenue excludes cancelled orders
+      Order.aggregate([
+        { $match: { status: { $ne: "CANCELLED" } } },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+      ]),
+      Order.countDocuments({ status: "CANCELLED" }),
+    ]);
 
     return {
       totalOrders,
       totalUsers,
       pendingSizeRequests,
       totalRevenue: revenueResult[0]?.total ?? 0,
+      cancelledOrders: cancelledCount,
     };
   },
 };
