@@ -10,12 +10,14 @@ import type {
   IOrder,
 } from "@/types";
 
-// Extended message type that can carry structured data
 export interface ChatMessageWithData extends IChatMessage {
   data?: {
     type: "products" | "cart" | "order";
     payload: IProduct[] | ICart | IOrder;
   };
+  // Stores the original user query that produced this result
+  // so we can offer a "Search again" button after page refresh
+  sourceQuery?: string;
 }
 
 interface UseChatReturn {
@@ -38,7 +40,28 @@ export function useChat(): UseChatReturn {
         const res = await fetch("/api/chat");
         const data: ApiResponse<IChatHistory> = await res.json();
         if (!cancelled && data.success) {
-          setMessages(data.data.messages);
+          // History from DB, text only, no product cards
+          // Mark assistant messages that look like product results
+          // so ChatMessage can show a "Show again" button
+          const enriched = data.data.messages.map((m, i, arr) => {
+            const isProductReply =
+              m.role === "assistant" &&
+              (m.content.startsWith("Here are") ||
+                m.content.includes("products"));
+
+            // Find the preceding user message to use as sourceQuery
+            const prevUser = arr
+              .slice(0, i)
+              .reverse()
+              .find((x) => x.role === "user");
+
+            return {
+              ...m,
+              sourceQuery:
+                isProductReply && prevUser ? prevUser.content : undefined,
+            };
+          });
+          setMessages(enriched);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -74,7 +97,6 @@ export function useChat(): UseChatReturn {
       }> = await res.json();
 
       if (result.success) {
-        // Detect what kind of data came back
         const raw = result.data.data;
         let attachedData: ChatMessageWithData["data"] = undefined;
 
@@ -99,19 +121,19 @@ export function useChat(): UseChatReturn {
           attachedData = { type: "order", payload: raw as IOrder };
         }
 
-        const assistantMsg: ChatMessageWithData = {
-          _id: result.data.messageId,
-          userId: "",
-          role: "assistant",
-          content: result.data.message,
-          timestamp: new Date(),
-          data: attachedData,
-        };
-
         setMessages((prev) => [
           ...prev.filter((m) => m._id !== optimistic._id),
           { ...optimistic, _id: `user-${Date.now()}` },
-          assistantMsg,
+          {
+            _id: result.data.messageId,
+            userId: "",
+            role: "assistant",
+            content: result.data.message,
+            timestamp: new Date(),
+            data: attachedData,
+            // Store the user query that triggered this reply
+            sourceQuery: attachedData?.type === "products" ? text : undefined,
+          },
         ]);
       }
     } catch {
