@@ -1,20 +1,48 @@
 # ShopBot — AI-Powered E-Commerce Chatbot
 
-A full-stack conversational e-commerce application where users browse products, manage their cart, and complete checkout entirely through natural language chat — built with Next.js 15, MongoDB Atlas, and Google Gemini AI.
+## Project Summary
+
+ShopBot is a conversational e-commerce application built with Next.js 15, MongoDB Atlas, Mongoose, and Google Gemini 2.5 Flash.
+
+The application allows users to browse products, manage their cart, and place orders entirely through natural language conversations while maintaining a traditional storefront experience.
+
+### Key Highlights
+
+- Conversational shopping powered by Gemini 2.5 Flash
+- 10 supported chat intents
+- JWT authentication with access and refresh tokens
+- Persistent chat history linked to user accounts
+- MongoDB Atlas + Mongoose
+- Customer and Admin role-based access control
+- Admin dashboard for order and size request management
+- Fully deployed production application
+
+### Supported Chat Actions
+
+- Browse products
+- Add items to cart
+- Remove items from cart
+- Update quantities
+- View cart contents
+- Checkout entire cart
+- Checkout a single item
+- Cancel orders
+- Request unavailable sizes
+- Intelligent fallback handling for unsupported requests
 
 ---
 
 ## Live Demo
 
-> **Live URL:** https://ai-ecommerce-chatbot-six.vercel.app/shop  
+> **Live URL:** https://ai-ecommerce-chatbot-six.vercel.app/shop
 > **GitHub:** [ai-ecommerce-chatbot](https://github.com/rifah07/ai-ecommerce-chatbot.git)
 
 ### Test Accounts
 
-| Role     | Email                   | Password    |
-| -------- | ----------------------- | ----------- |
-| Customer | Register at `/register` | Your choice |
-| Admin    | admin@shopbot.com       | Admin1234!  |
+| Role     | Email                                         | Password    |
+| -------- | --------------------------------------------- | ----------- |
+| Customer | Register at `/register`                       | Your choice |
+| Admin    | [admin@shopbot.com](mailto:admin@shopbot.com) | Admin1234!  |
 
 ---
 
@@ -23,7 +51,7 @@ A full-stack conversational e-commerce application where users browse products, 
 | Layer          | Technology                                                               |
 | -------------- | ------------------------------------------------------------------------ |
 | Frontend       | Next.js 15 (App Router), TypeScript, Tailwind CSS, shadcn/ui             |
-| Backend        | Next.js API Routes — NestJS-inspired controller/service pattern          |
+| Backend        | Next.js API Routes — NestJS-inspired controller/service/model pattern    |
 | Database       | MongoDB Atlas + Mongoose                                                 |
 | Authentication | Custom JWT — Access Token (15m) + Refresh Token (7d) + HTTP-only Cookies |
 | AI             | Google Gemini 2.5 Flash — intent extraction only                         |
@@ -31,17 +59,19 @@ A full-stack conversational e-commerce application where users browse products, 
 
 ---
 
-## Core Architecture
+## Architecture
 
-```
+```text
 User Message → Gemini (Intent Extraction) → Zod Validation → Service Layer → MongoDB → Response
 ```
 
 **The AI never executes business logic.** Gemini only extracts intent and entities from natural language. All business logic lives in the service layer — making the system predictable, testable, and safe from hallucination side effects.
 
+If Gemini returns a 503 (free tier high demand) or malformed JSON, the system catches it gracefully, returns an `UNKNOWN` intent, and shows the user a helpful fallback message. Nothing crashes.
+
 ### Folder Structure
 
-```
+```text
 src/
 ├── app/                    # Next.js App Router
 │   ├── (auth)/             # Login, Register
@@ -49,12 +79,12 @@ src/
 │   ├── (admin)/            # Admin Dashboard, Orders, Size Requests
 │   └── api/                # REST API — controllers only, no business logic
 ├── models/                 # Mongoose schemas with indexes
-├── services/               # All business logic (authService, cartService, etc.)
-├── validators/             # Zod schemas — user input + AI output validation
-├── constants/              # Shared enums (sizes, categories, roles, intents)
+├── services/               # All business logic
+├── validators/             # Zod schemas for user input AND AI output
+├── constants/              # Sizes, categories, roles, intent names
 ├── types/                  # Shared TypeScript interfaces
-├── data/                   # Seed data — 30 products with tags
-├── hooks/                  # React hooks (useAuth, useCart, useChat)
+├── data/                   # 30 seed products with tags
+├── hooks/                  # useAuth, useCart, useChat
 ├── components/             # UI components
 └── lib/                    # Infrastructure only
     ├── db/                 # MongoDB connection singleton
@@ -63,72 +93,108 @@ src/
     └── utils/              # AppError, response helpers, bcrypt
 ```
 
+## Why This Architecture?
+
+Instead of allowing the LLM to directly execute business operations, Gemini is only responsible for extracting structured user intent from natural language.
+
+```text
+User Message
+    ↓
+Gemini
+    ↓
+Structured Intent
+    ↓
+Zod Validation
+    ↓
+Service Layer
+    ↓
+MongoDB
+```
+
+This approach provides several benefits:
+
+- Predictable and testable business logic
+- Reduced risk of AI hallucinations affecting data
+- Strong runtime validation through Zod schemas
+- Easier debugging and maintenance
+- Ability to swap AI providers without changing application services
+
+The AI interprets user intent, but every business action is performed by deterministic application code.
+
 ---
 
 ## Features
 
-### Customer Features
+### Customer
 
 #### Product Catalog
 
-- 30 products — 15 T-Shirts + 15 Pants with realistic images (Unsplash)
+- 30 products — 15 T-Shirts + 15 Pants with real images (Unsplash)
 - Filter by category, size, tag, or free-text search
-- MongoDB text index with weighted relevance scoring (name > tags > description)
-- Product cards showing available sizes, tags, and price
+- MongoDB text index with weighted relevance scoring (`name > tags > description`)
+- Inline size picker on product cards — select size then add to cart without leaving the page
 
 #### AI Chatbot — Supported Intents
 
-| Intent             | Example Message                      | What Happens                              |
-| ------------------ | ------------------------------------ | ----------------------------------------- |
-| `BROWSE_PRODUCTS`  | "Show me running t-shirts in size L" | Returns product cards inline in chat      |
-| `ADD_TO_CART`      | "Add slim chino in M to my cart"     | Adds item, checks size availability first |
-| `REMOVE_FROM_CART` | "Remove the polo from my cart"       | Removes item by name                      |
-| `UPDATE_QUANTITY`  | "Change polo quantity to 2"          | Updates quantity without removing         |
-| `VIEW_CART`        | "What is in my cart?"                | Shows cart summary with totals            |
-| `CHECKOUT`         | "Checkout"                           | Places order for entire cart              |
-| `CHECKOUT_ITEM`    | "Checkout only the slim chino"       | Places order for one specific item        |
-| `CANCEL_ORDER`     | "Cancel my order"                    | Cancels most recent cancellable order     |
-| `REQUEST_SIZE`     | "I want Nike tee in XXL"             | Creates size request automatically        |
-| `UNKNOWN`          | "What is the weather?"               | Helpful fallback with suggestions         |
+| Intent             | Example                              | What Happens                          |
+| ------------------ | ------------------------------------ | ------------------------------------- |
+| `BROWSE_PRODUCTS`  | "Show me running t-shirts in size L" | Product cards render inline in chat   |
+| `ADD_TO_CART`      | "Add slim chino in M to my cart"     | Adds item, checks size availability   |
+| `REMOVE_FROM_CART` | "Remove the polo from my cart"       | Removes item by name                  |
+| `UPDATE_QUANTITY`  | "Change polo quantity to 2"          | Updates quantity — does not remove    |
+| `VIEW_CART`        | "What is in my cart?"                | Cart summary with totals              |
+| `CHECKOUT`         | "Checkout"                           | Places order for entire cart          |
+| `CHECKOUT_ITEM`    | "Checkout only the slim chino"       | Places order for one specific item    |
+| `CANCEL_ORDER`     | "Cancel my order"                    | Cancels most recent cancellable order |
+| `REQUEST_SIZE`     | "I want the Nike tee in XXL"         | Size request created automatically    |
+| `UNKNOWN`          | "What is the weather?"               | Helpful fallback with suggestions     |
 
 #### Size Request Feature
 
-When a requested size is unavailable, instead of returning an error, the system automatically creates a `SizeRequest` document and informs the user their request has been recorded. This turns a failure state into a CRM feature.
+When a requested size is unavailable, instead of returning an error, the system creates a `SizeRequest` document in MongoDB and informs the user their request is recorded. Admins can mark requests as fulfilled when stock is restocked. This turns a failure state into a CRM feature.
 
 #### Cart
 
-- Add items directly from the product grid (inline size picker)
+- Add items from the product grid with inline size picker — no redirect needed
 - Remove individual items
 - Update quantity per item
 - Checkout entire cart or a single specific item
-- All cart actions also available through chat
+- All cart actions available through chat
 
 #### Orders
 
-- Full order history with status badges
-- Cancel PENDING or CONFIRMED orders directly from the orders page
+- Full order history with colour-coded status badges
+- Cancel `PENDING` or `CONFIRMED` orders from the orders page
 - Order cancellation also available through chat
 
 #### Chat
 
-- Persistent chat history linked to user account
-- Product cards render inline when bot shows products
-- Cart summary card renders when viewing cart
-- Order confirmation card renders after checkout
+- Persistent chat history linked to user account — survives page refresh
+- Product cards render inline in chat as a horizontally scrollable strip
+- After page refresh, product result messages show a **"Show products again"** button — clicking it re-runs the original query and fetches fresh results (better than showing stale cached data)
+- Cart summary card renders when viewing cart via chat
+- Order confirmation card renders after checkout via chat
+- Conversation context passed to Gemini — bot understands `"add the first one in M"` after browsing
 - Suggestion chips on empty chat state
 - Typing indicator while AI processes
 
-### Admin Features
+#### Demo / Help Page (`/demo`)
 
-- **Dashboard** — total orders (excluding cancelled), customer count, total revenue (excluding cancelled), pending size requests
-- **Orders table** — all orders with customer info, dropdown to update status (PENDING → CONFIRMED → SHIPPED → DELIVERED → CANCELLED)
-- **Size requests table** — all requests with product image, toggle PENDING ↔ FULFILLED
+- Clickable example messages with copy-to-clipboard
+- Organised by category: Browse, Cart, Checkout, Size Requests
+- Tips on how to combine filters and use context references
+
+### Admin
+
+- **Dashboard** — total active orders, customer count, revenue (cancelled orders excluded), pending size requests
+- **Orders table** — all orders with customer info, dropdown to update status (`PENDING → CONFIRMED → SHIPPED → DELIVERED → CANCELLED`)
+- **Size requests table** — all requests with product image, toggle `PENDING ↔ FULFILLED`
 
 ---
 
 ## Local Setup
 
-### 1. Clone and install
+### 1. Clone and Install
 
 ```bash
 git clone https://github.com/rifah07/ai-ecommerce-chatbot.git
@@ -136,7 +202,7 @@ cd ai-ecommerce-chatbot
 npm install
 ```
 
-### 2. Environment variables
+### 2. Environment Variables
 
 ```bash
 cp .env.example .env.local
@@ -146,86 +212,111 @@ Fill in `.env.local`:
 
 ```env
 MONGODB_URI=
+
 JWT_ACCESS_SECRET=
 JWT_REFRESH_SECRET=
+
 JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
+
 GEMINI_API_KEY=
+
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
 NODE_ENV=development
 ```
 
-### 3. Run development server
+### 3. Run Development Server
 
 ```bash
 npm run dev
 ```
 
-### 4. Seed the database
+### 4. Seed the Database
 
 ```bash
 curl -X POST http://localhost:3000/api/seed
 ```
 
-Creates 30 products and one admin account (`admin@shopbot.com` / `Admin1234!`).
-Safe to run multiple times — does not delete chat history or orders.
+Creates 30 products and one admin account:
 
-### 5. Open the app
+```text
+admin@shopbot.com
+Admin1234!
+```
 
+Safe to run multiple times — never deletes chat history, orders, or cart items.
+
+### 5. Visit the App
+
+```text
+http://localhost:3000        → redirects to /shop
+http://localhost:3000/demo   → chat guide with example messages
 ```
-http://localhost:3000       → redirects to /shop
-http://localhost:3000/demo  → chat guide with example messages
-```
+
+````
 
 ---
 
-## Challenges & Solutions
+## Challenges & How I Solved Them
 
-### 1. Next.js 15 Cookie Handling
+### 1. Next.js 15 Cookie Handling — Auth Cookies Not Being Set
 
-**Challenge:** Auth cookies were not being set after login. DevTools showed no `accessToken` or `refreshToken` cookies despite the login endpoint returning 200.
+After login the Navbar still showed **Login** and **Register**. DevTools showed no cookies despite the API returning `200`.
 
-**Root cause:** `cookies()` from `next/headers` is unreliable when called inside helper functions from Route Handlers in Next.js 15. Additionally, `sameSite: "strict"` was blocking cookies on the first request after a redirect.
+**Root cause**
 
-**Solution:** Set cookies directly on the `NextResponse` object using `response.cookies.set()`. Changed `sameSite` from `"strict"` to `"lax"`. Added `router.refresh()` after `router.push()` to re-mount client components including the Navbar.
+Two bugs together:
+
+- `cookies()` from `next/headers` is unreliable inside helper functions called from Route Handlers in Next.js 15.
+- `sameSite: "strict"` blocked cookies on the first request after redirect.
+
+**Solution**
+
+- Use `response.cookies.set()` directly on the `NextResponse`.
+- Change `sameSite` to `"lax"`.
+- Add `router.refresh()` after `router.push()`.
 
 ---
 
-### 2. Next.js 15 Async Params
+### 2. Next.js 15 Async Dynamic Params
 
-**Challenge:** `Error: Route "/api/cart/[itemId]" used params.itemId. params is a Promise and must be unwrapped with await.`
+Cart item deletion threw:
 
-**Root cause:** Next.js 15 changed dynamic route segment params from a plain object to a Promise.
+```text
+params is a Promise and must be unwrapped with await
+````
 
-**Solution:**
+**Solution**
 
 ```typescript
-// Before (Next.js 14)
-const { itemId } = context.params;
-
-// After (Next.js 15)
-const { itemId } = await (context as { params: Promise<{ itemId: string }> })
-  .params;
+const { itemId } = await (
+  context as {
+    params: Promise<{ itemId: string }>;
+  }
+).params;
 ```
 
 ---
 
 ### 3. React Cascading setState Warning
 
-**Challenge:** Multiple hooks (`useAuth`, `useCart`, `useChat`, `ProductGrid`) triggered `Error: Calling setState synchronously within an effect can trigger cascading renders`.
-
-**Root cause:** Using `useCallback` to create async functions that called `setState`, then passing those as `useEffect` dependencies.
-
-**Solution:** Define an `async function load()` inline inside `useEffect` with a `cancelled` flag to prevent stale updates:
+**Solution**
 
 ```typescript
 useEffect(() => {
   let cancelled = false;
+
   async function load() {
-    // fetch data
-    if (!cancelled) setState(data);
+    const data = await fetch(...);
+
+    if (!cancelled) {
+      setState(data);
+    }
   }
+
   load();
+
   return () => {
     cancelled = true;
   };
@@ -234,85 +325,147 @@ useEffect(() => {
 
 ---
 
-### 4. Gemini Model Availability
+### 4. Chat History — MongoDB ObjectId vs String Mismatch
 
-**Challenge:** `gemini-1.5-flash` was unavailable. Switched to `gemini-2.5-flash` which occasionally returns 503 under high demand on the free tier.
-
-**Solution:** The `extractIntent()` function catches all errors and returns `UNKNOWN` intent gracefully — the chat shows a helpful fallback message instead of crashing. In production, retry logic with exponential backoff would be added.
-
----
-
-### 5. AI Intent Schema Design
-
-**Challenge:** A flat intent schema caused TypeScript to lose type information, requiring unsafe casts everywhere.
-
-**Solution:** Used `z.discriminatedUnion` from Zod — TypeScript automatically narrows the type in each `case` of the intent router switch statement, eliminating the need for manual type guards.
-
----
-
-### 6. Mongoose Populated Fields TypeScript
-
-**Challenge:** Mongoose's `.populate()` returns populated documents at runtime, but TypeScript still sees the field as `ObjectId`, causing type errors on access.
-
-**Solution:** Use `.lean()` to get plain JavaScript objects, then cast through `unknown`:
+**Solution**
 
 ```typescript
-const product = item.productId as unknown as { name: string; price: number };
+const userObjectId = new mongoose.Types.ObjectId(userId);
+
+ChatMessage.find({
+  userId: userObjectId,
+});
 ```
+
+Applied consistently in:
+
+- `saveMessage`
+- `getHistory`
+- `getRecentMessages`
 
 ---
 
-## New Knowledge & Skills Learned
+### 5. Gemini Returning UNKNOWN After First Successful Request
 
-- **Next.js 15 App Router** — async params, Server vs Client Component boundaries, `router.refresh()` for re-mounting
-- **Custom JWT authentication** — access/refresh token rotation, HTTP-only cookie security, `sameSite` behavior
-- **LLM prompt engineering** — system prompts with typed JSON schemas and few-shot examples to get consistent structured output
-- **Zod as an AI output validator** — treating LLM responses as untrusted external input that must be validated before touching the database
-- **MongoDB text indexes** — weighted scoring across multiple fields for relevance-ranked search
-- **`z.discriminatedUnion`** — type-safe discriminated unions that eliminate runtime type guards
-- **React concurrent features** — `useTransition` for non-urgent state updates, cleanup patterns for async effects
+**Solution**
+
+```typescript
+content: m.role === "assistant" && m.content.length > 120
+  ? m.content.slice(0, 120) + "…"
+  : m.content;
+```
+
+Assistant messages are truncated before being sent back as context.
+
+---
+
+### 6. Product Cards Gone After Page Refresh
+
+**Considered options**
+
+- Store product arrays in MongoDB
+- Re-fetch products for every historical message
+- Show a re-run button
+
+**Solution**
+
+Added:
+
+```text
+↻ Show products again
+```
+
+The button re-sends the original query and fetches fresh products.
+
+---
+
+### 7. Production 401 on Vercel (Cross-Region Cookie Issue)
+
+**Solution**
+
+- Added refresh-token fallback inside `requireAuth`
+- Added `src/middleware.ts`
+- Forced `/api/*` routes to run dynamically
+
+---
+
+## New Knowledge & Skills Gained
+
+- **Next.js 15 App Router**
+- **Custom JWT authentication**
+- **LLM prompt engineering**
+- **Zod AI output validation**
+- **z.discriminatedUnion**
+- **MongoDB text indexes**
+- **Mongoose ObjectId handling**
+- **React concurrent features**
 
 ---
 
 ## AI Tool Usage
 
-I used **Claude (Anthropic)** throughout this project as a senior architect and code reviewer.
+I used **Claude (Anthropic)** throughout this project as a architect and code reviewer.
 
-**How I used it:**
+### Architecture & Planning
 
-- **Architecture planning** — Designed the full folder structure, authentication flow, and AI pipeline architecture before writing any code
-- **Code generation** — Generated boilerplate for models, services, and API routes which I then reviewed and modified
-- **Bug investigation** — When I encountered errors (cookie issues, TypeScript errors, Next.js 15 breaking changes), I shared the exact error messages and got targeted fixes
-- **Decision making** — Asked for comparison of approaches (e.g. embedded chat messages array vs one document per message) and chose based on the reasoning provided
+Designed:
 
-**What I verified and modified:**
+- Folder structure
+- Authentication flow
+- AI intent-extraction pipeline
 
-- Adapted folder naming and structure to my preferences
-- Tested every feature in the browser before moving to the next
-- All bugs were debugged by me first — I checked DevTools, read error messages, and formed hypotheses before asking for help
+### Code Generation
+
+Generated boilerplate for:
+
+- Models
+- Services
+- API routes
+
+Every file was reviewed before use.
+
+### Bug Investigation
+
+Used Claude to discuss:
+
+- Cookie issues
+- ObjectId mismatches
+- Gemini context overflow
+
+### What I Changed
+
+- Added quantity updates
+- Added single-item checkout
+- Added order cancellation
+- Added admin dashboard
+- Added demo page
+
+Every generated code block was understood before use.
 
 ---
 
 ### Fully Implemented
 
-- ✅ Product catalog with images, sizes, categories, tags, search and filters
-- ✅ All 10 chat intents (browse, add, remove, update quantity, view cart, checkout all, checkout single item, cancel order, request size, unknown)
-- ✅ Size request feature — automatically created when size unavailable
-- ✅ User registration and login with JWT authentication
-- ✅ Chat history persisted and linked to user account
-- ✅ Inline product cards, cart summary, and order confirmation in chat
-- ✅ Cart page — add from shop UI, remove, update quantity, checkout all or single item
-- ✅ Orders page — full history, cancel button on cancellable orders
-- ✅ RBAC — CUSTOMER and ADMIN roles
-- ✅ Admin dashboard with live stats (revenue excludes cancelled orders)
-- ✅ Admin order management — update status via dropdown
-- ✅ Admin size request management — mark as fulfilled
-- ✅ Demo/Help page with example chat messages
-- ✅ Deployed on Vercel
+- ✅ Product catalog — 30 products, images, filters, text search
+- ✅ 10 chat intents
+- ✅ Size request workflow
+- ✅ JWT authentication
+- ✅ Persistent chat history
+- ✅ Inline product cards
+- ✅ Show products again button
+- ✅ Inline size picker
+- ✅ Cart management
+- ✅ Orders management
+- ✅ RBAC (CUSTOMER / ADMIN)
+- ✅ Admin dashboard
+- ✅ Admin order management
+- ✅ Admin size request management
+- ✅ Demo/help page
+- ✅ Vercel deployment
 
 ### Known Limitations
 
-- Gemini free tier occasionally returns 503 under high demand — user must resend the message
-- No real payment processing (as per requirements — checkout is simulated)
-- No email notifications when size request is fulfilled
-- Chat history loads first 50 messages only (no infinite scroll)
+- Gemini free tier occasionally returns `503` (handled gracefully)
+- No real payment processing
+- No email notifications for fulfilled size requests
+- Chat history limited to first 50 messages (no pagination UI yet)
