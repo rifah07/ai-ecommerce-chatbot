@@ -6,7 +6,7 @@ A full-stack conversational e-commerce application where users browse products, 
 
 ## Live Demo
 
-> **Live URL:** https://ai-ecommerce-chatbot-six.vercel.app/shop
+> **Live URL:** https://ai-ecommerce-chatbot-six.vercel.app/shop  
 > **GitHub:** [ai-ecommerce-chatbot](https://github.com/rifah07/ai-ecommerce-chatbot.git)
 
 ### Test Accounts

@@ -8,10 +8,8 @@ export async function requireRole(
   role: UserRole,
 ): Promise<JWTPayload> {
   const user = await requireAuth(request);
-
   if (user.role !== role) {
     throw new AppError("UNAUTHORIZED", `Access denied. Required role: ${role}`);
   }
-
   return user;
 }

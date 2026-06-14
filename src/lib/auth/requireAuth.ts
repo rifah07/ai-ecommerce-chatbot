@@ -1,23 +1,39 @@
 import { NextRequest } from "next/server";
-import { verifyAccessToken } from "@/lib/auth/jwt";
+import { verifyAccessToken, verifyRefreshToken } from "@/lib/auth/jwt";
 import { AppError } from "@/lib/utils/AppError";
+import { connectDB } from "@/lib/db/connect";
 import type { JWTPayload } from "@/types";
 
 /**
- * Reads accessToken directly from the incoming request cookies.
- * This is the correct approach for Next.js 15 Route Handlers.
+ * Reads accessToken from the request cookies.
+ * If expired, automatically tries to refresh using refreshToken.
+ * Returns decoded { userId, email, role }.
+ * Throws AppError("UNAUTHORIZED") if both tokens are missing or invalid.
  */
 export async function requireAuth(request: NextRequest): Promise<JWTPayload> {
-  const token = request.cookies.get("accessToken")?.value;
+  const accessToken = request.cookies.get("accessToken")?.value;
+  const refreshToken = request.cookies.get("refreshToken")?.value;
 
-  if (!token) {
-    throw new AppError("UNAUTHORIZED", "Authentication required");
+  if (accessToken) {
+    const payload = verifyAccessToken(accessToken);
+    if (payload) return payload;
   }
 
-  const payload = verifyAccessToken(token);
-  if (!payload) {
-    throw new AppError("UNAUTHORIZED", "Invalid or expired token");
+  if (refreshToken) {
+    const refreshPayload = verifyRefreshToken(refreshToken);
+    if (refreshPayload) {
+      await connectDB();
+      const { default: User } = await import("@/models/User");
+      const user = await User.findById(refreshPayload.userId);
+      if (user) {
+        return {
+          userId: user._id.toString(),
+          email: user.email,
+          role: user.role,
+        };
+      }
+    }
   }
 
-  return payload;
+  throw new AppError("UNAUTHORIZED", "Authentication required. Please log in.");
 }
