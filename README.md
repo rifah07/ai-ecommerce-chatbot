@@ -34,7 +34,7 @@ The application allows users to browse products, manage their cart, and place or
 
 ## Live Demo
 
-> **Live URL:** https://ai-ecommerce-chatbot-six.vercel.app/shop
+> **Live URL:** https://ai-ecommerce-chatbot-six.vercel.app/shop  
 > **GitHub:** [ai-ecommerce-chatbot](https://github.com/rifah07/ai-ecommerce-chatbot.git)
 
 ### Test Accounts
@@ -252,11 +252,8 @@ Safe to run multiple times — never deletes chat history, orders, or cart items
 ```text
 http://localhost:3000        → redirects to /shop
 http://localhost:3000/demo   → chat guide with example messages
+
 ```
-
-````
-
----
 
 ## Challenges & How I Solved Them
 
@@ -285,7 +282,7 @@ Cart item deletion threw:
 
 ```text
 params is a Promise and must be unwrapped with await
-````
+```
 
 **Solution**
 
@@ -404,7 +401,7 @@ The button re-sends the original query and fetches fresh products.
 
 ## AI Tool Usage
 
-I used **Claude (Anthropic)** throughout this project as a architect and code reviewer.
+I used Claude (Anthropic) as an architectural assistant, code reviewer, and debugging partner throughout the project.
 
 ### Architecture & Planning
 
@@ -440,7 +437,7 @@ Used Claude to discuss:
 - Added admin dashboard
 - Added demo page
 
-Every generated code block was understood before use.
+All generated code was reviewed, tested, and modified where necessary before being merged into the project.
 
 ---
 
